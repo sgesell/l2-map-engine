@@ -426,7 +426,7 @@ TEST_CASE("Diagnostic: mapped values match source polynomial evaluation",
 //   where elements partially overlap. This is the real stress test.
 //   Uses sin/cos field and checks that the error is reasonable.
 // ===========================================================================
-TEST_CASE("Diagnostic: sin/cos field — non-nested meshes",
+TEST_CASE("Diagnostic: sin/cos field - non-nested meshes",
           "[diagnostic][mapping][critical]")
 {
     auto f = [](double x, double y) {
