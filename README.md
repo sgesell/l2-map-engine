@@ -4,7 +4,7 @@ A C++17 library for remapping finite element fields between meshes using $L^2$ p
 
 ## Features
 
-- **2D and 3D support** — Quad8 (8-node serendipity quad) and Hex20 (20-node serendipity hex) elements
+- **2D and 3D support** — Quad4, Quad8 (2D) and Hex8, Tet4 (3D) elements
 - **Exact polygon/polyhedron clipping** — Sutherland-Hodgman algorithm for mesh intersection
 - **Stokes-theorem integration** — efficient polynomial integration over clipped regions without quadrature
 - **Vandermonde-based basis construction** — numerically stable Lagrange bases via Eigen `FullPivLU`
@@ -59,9 +59,30 @@ cd build
 ctest --output-on-failure
 ```
 
+Tests use Catch2 tags to organise by subsystem:
+
+| Tag | Scope |
+|-----|-------|
+| `[basis_builder]` | Vandermonde basis construction and Lagrange delta properties |
+| `[mapping_engine]` | 2D mapping: identity, parallel, bounds enforcement, reference data |
+| `[mapping_3d]` | 3D mapping: linear/quadratic fields, multi-component, parallel |
+| `[mapping_3d][scale]` | 3D scale tests (1K, 10K fine elements) |
+| `[poly_integrator]` | Stokes-theorem polygon integration |
+| `[polygon_clipper]` | Sutherland-Hodgman clipping |
+| `[reference]` | Regression tests against stored reference data |
+
+Run a subset with:
+
+```bash
+cd build
+ctest -R mapping_3d --output-on-failure
+```
+
 ## Python usage
 
 After building, the extension module `l2map_py` is in `build/python/` (or `build/python/Release/` on MSVC).
+
+### 2D example (Quad8)
 
 ```python
 import sys
@@ -82,10 +103,34 @@ result = l2map_py.map_integration_points(
     n_threads=-1,          # -1 = all available cores
 )
 
-print(result.values.shape)   # (M_new * n_ipts, K)
+print(result.values.shape)        # (M_new * 9, K)
+print(len(result.ipoint_coords))  # M_new * 9 — list of (x, y) arrays
 ```
 
+### 3D example (Hex8)
+
+```python
+# nodes:    shape (N, 4)       — columns: [id, x, y, z]  (1-indexed IDs)
+# elements: shape (M, 9)       — columns: [id, n1..n8]   (1-indexed, Hex8)
+# field:    shape (M*8, 2+K)   — columns: [elem_id, ipt_id, v1..vK]
+
+result = l2map_py.map_integration_points(
+    nodes_new, elements_new,
+    nodes_old, elements_old,
+    field_data,
+    element_type="Hex8",   # dispatches to MappingEngine3D
+    n_threads=-1,
+)
+
+print(result.values.shape)        # (M_new * 8, K)
+print(len(result.ipoint_coords))  # M_new * 8 — list of (x, y, z) arrays
+```
+
+Supported `element_type` values: `"Quad4"`, `"Quad8"` (2D), `"Hex8"`, `"Tet4"` (3D).
+
 ## C++ usage
+
+### 2D
 
 ```cpp
 #include "l2map/mapping_engine.hpp"
@@ -97,6 +142,22 @@ opts.n_threads = 4;
 l2map::MappingEngine engine(opts);
 l2map::MappingResult result = engine.map_integration_points(old_mesh, new_mesh, field_data);
 // result.values  — Eigen MatrixXd (n_new_ipts × n_components)
+```
+
+### 3D
+
+```cpp
+#include "l2map/mapping_engine_3d.hpp"
+#include "l2map/mesh.hpp"
+
+l2map::MappingOptions3D opts;
+opts.n_threads = 4;
+
+l2map::MappingEngine3D engine(opts);
+l2map::MappingResult3D result = engine.map_integration_points(
+    old_mesh, new_mesh, field_data, "Hex8");
+// result.values        — Eigen MatrixXd (n_new_ipts × n_components)
+// result.ipoint_coords — std::vector<Point3D>
 ```
 
 ## Project structure

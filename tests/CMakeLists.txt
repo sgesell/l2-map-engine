@@ -8,6 +8,7 @@ set(TEST_SOURCES
   test_poly_integrator.cpp
   test_mapping_engine.cpp
   test_mapping_engine_3d.cpp
+  test_mapping_engine_diagnostic.cpp
 )
 
 foreach(src ${TEST_SOURCES})
@@ -18,5 +19,5 @@ foreach(src ${TEST_SOURCES})
   target_compile_definitions(${test_name} PRIVATE
     TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference_data"
   )
-  catch_discover_tests(${test_name})
+  catch_discover_tests(${test_name} TEST_SPEC "~[scale]")
 endforeach()

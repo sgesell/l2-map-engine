@@ -148,25 +148,29 @@ MatrixXd MappingEngine::build_rhs_(
         for (size_t k = 0; k < itp_old_global.size(); ++k)
             itp_old_shifted[k] = itp_old_global[k] - shift;
 
-        BasisMatrix basis_old_local = basis_builder_.build(itp_old_shifted);
         int N_old = static_cast<int>(itp_old_shifted.size());
 
-        // Precompute field interpolation polynomials for each component:
-        //   field_poly[:, l] = Σ_i beta[i,l] * basis_old_local[i, :]
-        // Shape: (n_monomials, n_components)
+        // Build Vandermonde directly in new element's coordinate system (no extra shift)
+        MatrixXd A_old(N_old, N_old);
+        for (int i = 0; i < N_old; ++i)
+            A_old.row(i) = mono.evaluate(itp_old_shifted[i][0], itp_old_shifted[i][1]);
+
+        Eigen::FullPivLU<MatrixXd> lu_old(A_old);
+        if (lu_old.rank() < N_old) continue;  // skip degenerate overlap
+
+        // Solve V_old * field_poly = beta  (same approach as 3D exact engine)
         int n_comp_local = std::min(n_components, static_cast<int>(beta.cols()));
-        MatrixXd field_poly = MatrixXd::Zero(N_old, n_comp_local);
-        for (int i = 0; i < N_old; ++i) {
-            if (i >= beta.rows()) break;
-            for (int l = 0; l < n_comp_local; ++l)
-                field_poly.col(l) += beta(i, l) * basis_old_local.row(i).transpose();
-        }
+        int n_beta_rows  = std::min(N_old, static_cast<int>(beta.rows()));
+        MatrixXd rhs_old = MatrixXd::Zero(N_old, n_comp_local);
+        if (n_beta_rows > 0)
+            rhs_old.topRows(n_beta_rows) = beta.topRows(n_beta_rows).leftCols(n_comp_local);
+        MatrixXd field_poly_mat = lu_old.solve(rhs_old);  // (N_old × n_comp)
 
         // For each test function j, integrate φ_j * field_poly[:, l] over intersection
         for (int j = 0; j < N; ++j) {
             VectorXd phi_j = basis_new.row(j);
             for (int l = 0; l < n_comp_local; ++l) {
-                VectorXd field_l = field_poly.col(l);
+                VectorXd field_l = field_poly_mat.col(l);
                 MonomialBasis2D mono_prod;
                 VectorXd prod = integrator.multiply_polynomials(
                     phi_j, mono, field_l, mono, mono_prod);

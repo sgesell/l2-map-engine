@@ -4,6 +4,7 @@
 #include <pybind11/eigen.h>
 
 #include "l2map/mapping_engine.hpp"
+#include "l2map/mapping_engine_3d.hpp"
 #include "l2map/mesh.hpp"
 #include "l2map/io.hpp"
 
@@ -28,11 +29,13 @@ static l2map::Mesh mesh_from_numpy(
     // Suffix _list to avoid any Python C API macro conflicts
     std::vector<l2map::Node> node_list;
     node_list.reserve(static_cast<size_t>(nb.shape(0)));
+    bool has_z = (nb.shape(1) >= 4);
     for (int i = 0; i < (int)nb.shape(0); ++i) {
         l2map::Node nd;
         nd.id = static_cast<l2map::NodeID>(nb(i, 0)) - 1;  // → 0-indexed
         nd.x  = nb(i, 1);
         nd.y  = nb(i, 2);
+        if (has_z) nd.z = nb(i, 3);
         node_list.push_back(nd);
     }
 
@@ -54,7 +57,12 @@ static l2map::Mesh mesh_from_numpy(
 // High-level numpy-friendly mapping function
 // ---------------------------------------------------------------------------
 
-static l2map::MappingResult map_integration_points_numpy(
+// Check whether an element type is 3D (registered in ElementLibrary3D).
+static bool is_3d_element_type(const std::string& element_type) {
+    return (element_type == "Hex8" || element_type == "Tet4");
+}
+
+static py::object map_integration_points_numpy(
     py::array_t<double> nodes_new,
     py::array_t<double> elements_new,
     py::array_t<double> nodes_old,
@@ -75,13 +83,24 @@ static l2map::MappingResult map_integration_points_numpy(
         for (int j = 0; j < (int)fb.shape(1); ++j)
             fd(i, j) = fb(i, j);
 
+    if (is_3d_element_type(element_type)) {
+        l2map::MappingOptions3D opts3d;
+        opts3d.verbose   = verbose;
+        opts3d.n_threads = n_threads;
+
+        l2map::MappingEngine3D engine3d(opts3d);
+        l2map::MappingResult3D res3d = engine3d.map_integration_points(
+            old_mesh, new_mesh, fd, element_type);
+        return py::cast(std::move(res3d));
+    }
+
     l2map::MappingOptions opts;
     opts.verbose          = verbose;
     opts.enforce_positive = enforce_positive;
     opts.n_threads        = n_threads;
 
     l2map::MappingEngine engine(opts);
-    return engine.map_integration_points(old_mesh, new_mesh, fd);
+    return py::cast(engine.map_integration_points(old_mesh, new_mesh, fd));
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +122,10 @@ PYBIND11_MODULE(l2map_py, m) {
         .def_readonly("values",        &l2map::MappingResult::values)
         .def_readonly("ipoint_coords", &l2map::MappingResult::ipoint_coords)
         .def_readonly("n_clipped",     &l2map::MappingResult::n_clipped);
+
+    py::class_<l2map::MappingResult3D>(m, "MappingResult3D")
+        .def_readonly("values",        &l2map::MappingResult3D::values)
+        .def_readonly("ipoint_coords", &l2map::MappingResult3D::ipoint_coords);
 
     m.def("map_integration_points", &map_integration_points_numpy,
           py::arg("nodes_new"),
