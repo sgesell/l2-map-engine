@@ -1,6 +1,6 @@
 # L2MapEngine
 
-A C++17 library for remapping finite element fields between meshes using L² projection. Given a scalar (or multi-component) field defined at integration points on a source mesh, L2MapEngine computes the best-fit projection onto a target mesh by solving local L²-norm minimisation problems element-by-element.
+A C++17 library for remapping finite element fields between meshes using $L^2$ projection. Given a scalar (or multi-component) field defined at integration points on a source mesh, L2MapEngine computes the best-fit projection onto a target mesh by solving local $L^2$-norm minimisation problems element-by-element.
 
 ## Features
 
@@ -14,16 +14,15 @@ A C++17 library for remapping finite element fields between meshes using L² pro
 
 ## Method
 
-For each new element `e_n` the library solves the local system
+For each new element $e_n$ the library solves the local system
 
-```
-V · α = M
+$$\mathbf{V} \boldsymbol{\alpha} = \mathbf{M}$$
 
-V[i,j] = ∫_{e_n} φ_i φ_j dA
-M[j,l]  = Σ_{e_o ∩ e_n ≠ ∅}  ∫_{e_o ∩ e_n} φ_j · (Σ_k β_{k,l} ψ_k) dA
-```
+$$V_{ij} = \int_{e_n} \varphi_i \, \varphi_j \, dA$$
 
-where `φ` are the new element basis polynomials, `ψ` the old element bases, and `β` the source field coefficients. See [docs/math_notes.md](docs/math_notes.md) for the full derivation.
+$$M_{jl} = \sum_{\substack{e_o \,:\, e_o \cap e_n \neq \emptyset}} \int_{e_o \cap e_n} \varphi_j \left( \sum_k \beta_{kl} \, \psi_k \right) dA$$
+
+where $\varphi_i$ are the new element basis polynomials, $\psi_k$ the old element bases, and $\beta_{kl}$ the source field coefficients. See [docs/math_notes.md](docs/math_notes.md) for the full derivation.
 
 ## Requirements
 
