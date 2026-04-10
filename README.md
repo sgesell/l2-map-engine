@@ -114,5 +114,11 @@ cmake/                CMake dependency helpers
 
 ## References
 
+- Gesell, S. (2024). "Anwendung des CTOD-Konzepts auf Rissfortschritt unter thermomechanischer Beanspruchung mithilfe von Experimenten und numerischer Simulation." Doctoral thesis, Technische Universität Bergakademie Freiberg. URN: [urn:nbn:de:bsz:105-qucosa2-928920](https://nbn-resolving.org/urn:nbn:de:bsz:105-qucosa2-928920)
 - Chin, E.B., Lasserre, J.B., Sukumar, N. (2015). "Numerical integration of homogeneous functions on convex and nonconvex polygons and polyhedra." *Computational Mechanics*.
 - ABAQUS Theory Manual — element formulations.
+
+## License
+
+[PolyForm Noncommercial License 1.0.0](LICENSE) — free for noncommercial use.
+For commercial licensing, see [COMMERCIAL.md](COMMERCIAL.md).

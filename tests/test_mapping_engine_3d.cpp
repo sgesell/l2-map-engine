@@ -177,7 +177,7 @@ TEST_CASE("3D MappingEngine: coarse-to-fine linear field", "[mapping_3d]") {
         double got      = res.values(i, 0);
         max_err = std::max(max_err, std::abs(got - expected));
     }
-    INFO("Max error (linear, coarse→fine 3³→6³): " << max_err);
+    INFO("Max error (linear, coarse->fine 3^3->6^3): " << max_err);
     CHECK(max_err < 1e-8);
 }
 
@@ -216,7 +216,7 @@ TEST_CASE("3D MappingEngine: coarse-to-fine quadratic field accuracy", "[mapping
         rms_err += err * err;
     }
     rms_err = std::sqrt(rms_err / n);
-    INFO("Quadratic field (4³→8³): max_err=" << max_err << " rms_err=" << rms_err);
+    INFO("Quadratic field (4^3->8^3): max_err=" << max_err << " rms_err=" << rms_err);
     // Quadratic field: trilinear approximation has O(h²) error
     // With h=1/4 on coarse mesh, expect error ~ 1/16 or so
     CHECK(max_err < 0.15);
@@ -253,7 +253,7 @@ TEST_CASE("3D MappingEngine: multi-component field", "[mapping_3d]") {
     for (int i = 0; i < res.values.rows(); ++i)
         for (int c = 0; c < 3; ++c)
             max_err = std::max(max_err, std::abs(res.values(i,c) - fd_fine(i, 2+c)));
-    INFO("Multi-component max_err (2³→4³): " << max_err);
+    INFO("Multi-component max_err (2^3->4^3): " << max_err);
     CHECK(max_err < 1e-8);
 }
 
@@ -328,10 +328,10 @@ run_scale_test(int nx_coarse, int ny_coarse, int nz_coarse,
 // Test 6: Scale 1 000 fine elements (10³)
 // Coarse: 5³ = 125, Fine: 10³ = 1000
 // =============================================================================
-TEST_CASE("3D Scale: 1K fine elements (5³→10³)", "[mapping_3d][scale]") {
+TEST_CASE("3D Scale: 1K fine elements (5^3->10^3)", "[mapping_3d][scale]") {
     auto [ms, max_err, rms_err] = run_scale_test(5, 5, 5, 10, 10, 10);
 
-    std::cout << "\n[Scale 1K]  coarse=5³  fine=10³"
+    std::cout << "\n[Scale 1K]  coarse=5^3  fine=10^3"
               << "  time=" << ms << " ms"
               << "  max_err=" << max_err
               << "  rms_err=" << rms_err << "\n";
@@ -343,10 +343,10 @@ TEST_CASE("3D Scale: 1K fine elements (5³→10³)", "[mapping_3d][scale]") {
 // Test 7: Scale 10 000 fine elements (~21³ ≈ 9261, use 21³)
 // Coarse: 10³ = 1000, Fine: 21³ = 9261
 // =============================================================================
-TEST_CASE("3D Scale: 10K fine elements (10³→21³)", "[mapping_3d][scale]") {
+TEST_CASE("3D Scale: 10K fine elements (10^3->21^3)", "[mapping_3d][scale]") {
     auto [ms, max_err, rms_err] = run_scale_test(10, 10, 10, 21, 21, 21);
 
-    std::cout << "\n[Scale 10K] coarse=10³ fine=21³"
+    std::cout << "\n[Scale 10K] coarse=10^3 fine=21^3"
               << "  time=" << ms << " ms"
               << "  max_err=" << max_err
               << "  rms_err=" << rms_err << "\n";
@@ -358,10 +358,10 @@ TEST_CASE("3D Scale: 10K fine elements (10³→21³)", "[mapping_3d][scale]") {
 // Test 8: Scale 100 000 fine elements (~46³ ≈ 97336, use 46³)
 // Coarse: 22³ = 10648, Fine: 46³ = 97336
 // =============================================================================
-TEST_CASE("3D Scale: 100K fine elements (22³→46³)", "[mapping_3d][scale]") {
+TEST_CASE("3D Scale: 100K fine elements (22^3->46^3)", "[mapping_3d][scale]") {
     auto [ms, max_err, rms_err] = run_scale_test(22, 22, 22, 46, 46, 46);
 
-    std::cout << "\n[Scale 100K] coarse=22³ fine=46³"
+    std::cout << "\n[Scale 100K] coarse=22^3 fine=46^3"
               << "  time=" << ms << " ms"
               << "  max_err=" << max_err
               << "  rms_err=" << rms_err << "\n";
@@ -433,7 +433,7 @@ TEST_CASE("3D Exact: coarse-to-fine linear field", "[mapping_3d_exact]") {
         double got      = res.values(i, 0);
         max_err = std::max(max_err, std::abs(got - expected));
     }
-    INFO("Exact engine max error (linear, 3³→6³): " << max_err);
+    INFO("Exact engine max error (linear, 3^3->6^3): " << max_err);
     CHECK(max_err < 1e-8);
 }
 
@@ -466,14 +466,14 @@ TEST_CASE("3D Exact: multi-component linear field", "[mapping_3d_exact]") {
     for (int i = 0; i < res.values.rows(); ++i)
         for (int c = 0; c < 3; ++c)
             max_err = std::max(max_err, std::abs(res.values(i,c) - fd_fine(i, 2+c)));
-    INFO("Exact engine multi-component max_err (2³→4³): " << max_err);
+    INFO("Exact engine multi-component max_err (2^3->4^3): " << max_err);
     CHECK(max_err < 1e-8);
 }
 
 // =============================================================================
 // Test 12: Exact vs approximate — non-conforming meshes, linear field
 // =============================================================================
-TEST_CASE("3D Exact vs Approx: linear field (3³→5³)", "[mapping_3d_exact]") {
+TEST_CASE("3D Exact vs Approx: linear field (3^3->5^3)", "[mapping_3d_exact]") {
     auto linear_f = [](double x, double y, double z) -> VectorXd {
         VectorXd v(1);
         v[0] = 1.0 + x - 2.0*y + 3.0*z;
@@ -500,7 +500,7 @@ TEST_CASE("3D Exact vs Approx: linear field (3³→5³)", "[mapping_3d_exact]") 
         max_err_approx = std::max(max_err_approx, std::abs(r_approx.values(i,0) - expected));
         max_err_exact  = std::max(max_err_exact,  std::abs(r_exact .values(i,0) - expected));
     }
-    std::cout << "\n[Exact vs Approx, linear 3³→5³]"
+    std::cout << "\n[Exact vs Approx, linear 3^3->5^3]"
               << "  approx max_err=" << max_err_approx
               << "  exact  max_err=" << max_err_exact << "\n";
 
@@ -511,7 +511,7 @@ TEST_CASE("3D Exact vs Approx: linear field (3³→5³)", "[mapping_3d_exact]") 
 // =============================================================================
 // Test 13: Exact engine scale — 1K fine elements
 // =============================================================================
-TEST_CASE("3D Exact Scale: 1K fine elements (5³→10³)", "[mapping_3d_exact][scale]") {
+TEST_CASE("3D Exact Scale: 1K fine elements (5^3->10^3)", "[mapping_3d_exact][scale]") {
     auto f = [](double x, double y, double z) -> VectorXd {
         VectorXd v(1); v[0] = 1.0 + 2.0*x + 3.0*y + 4.0*z; return v;
     };
@@ -533,7 +533,7 @@ TEST_CASE("3D Exact Scale: 1K fine elements (5³→10³)", "[mapping_3d_exact][s
     for (int i = 0; i < res.values.rows(); ++i)
         max_err = std::max(max_err, std::abs(res.values(i,0) - fd_fine(i,2)));
 
-    std::cout << "\n[Exact Scale 1K]  coarse=5³  fine=10³"
+    std::cout << "\n[Exact Scale 1K]  coarse=5^3  fine=10^3"
               << "  time=" << ms << " ms"
               << "  max_err=" << max_err << "\n";
 
@@ -543,7 +543,7 @@ TEST_CASE("3D Exact Scale: 1K fine elements (5³→10³)", "[mapping_3d_exact][s
 // =============================================================================
 // Test 14: Exact engine scale — 10K fine elements (10³→21³)
 // =============================================================================
-TEST_CASE("3D Exact Scale: 10K fine elements (10³→21³)", "[mapping_3d_exact][scale]") {
+TEST_CASE("3D Exact Scale: 10K fine elements (10^3->21^3)", "[mapping_3d_exact][scale]") {
     auto f = [](double x, double y, double z) -> VectorXd {
         VectorXd v(1); v[0] = 1.0 + 2.0*x + 3.0*y + 4.0*z; return v;
     };
@@ -565,7 +565,7 @@ TEST_CASE("3D Exact Scale: 10K fine elements (10³→21³)", "[mapping_3d_exact]
     for (int i = 0; i < res.values.rows(); ++i)
         max_err = std::max(max_err, std::abs(res.values(i,0) - fd_fine(i,2)));
 
-    std::cout << "\n[Exact Scale 10K] coarse=10³ fine=21³"
+    std::cout << "\n[Exact Scale 10K] coarse=10^3 fine=21^3"
               << "  time=" << ms << " ms"
               << "  max_err=" << max_err << "\n";
 
@@ -575,7 +575,7 @@ TEST_CASE("3D Exact Scale: 10K fine elements (10³→21³)", "[mapping_3d_exact]
 // =============================================================================
 // Test 15: Exact engine scale — 100K fine elements (22³→46³)
 // =============================================================================
-TEST_CASE("3D Exact Scale: 100K fine elements (22³→46³)", "[mapping_3d_exact][scale]") {
+TEST_CASE("3D Exact Scale: 100K fine elements (22^3->46^3)", "[mapping_3d_exact][scale]") {
     auto f = [](double x, double y, double z) -> VectorXd {
         VectorXd v(1); v[0] = 1.0 + 2.0*x + 3.0*y + 4.0*z; return v;
     };
@@ -597,7 +597,7 @@ TEST_CASE("3D Exact Scale: 100K fine elements (22³→46³)", "[mapping_3d_exact
     for (int i = 0; i < res.values.rows(); ++i)
         max_err = std::max(max_err, std::abs(res.values(i,0) - fd_fine(i,2)));
 
-    std::cout << "\n[Exact Scale 100K] coarse=22³ fine=46³"
+    std::cout << "\n[Exact Scale 100K] coarse=22^3 fine=46^3"
               << "  time=" << ms << " ms"
               << "  max_err=" << max_err << "\n";
 
