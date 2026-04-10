@@ -117,6 +117,84 @@ TEST_CASE("BasisBuilder: evaluate_basis matches direct computation", "[basis_bui
 }
 
 // -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
+// Tri6 tests
+// -----------------------------------------------------------------------
+
+// Helper: unit right-angled Tri6 with nodes at corners (0,0),(1,0),(0,1)
+// and midsides at (0.5,0),(0.5,0.5),(0,0.5)
+static MatrixXd make_tri6_nodes() {
+    MatrixXd nodes(6, 2);
+    nodes << 0.0, 0.0,
+             1.0, 0.0,
+             0.0, 1.0,
+             0.5, 0.0,
+             0.5, 0.5,
+             0.0, 0.5;
+    return nodes;
+}
+
+TEST_CASE("Tri6: partition of unity at Gauss points", "[tri6][element_library]") {
+    MatrixXd nodes = make_tri6_nodes();
+    auto gpts = ElementLibrary::instance().compute_gauss_points_global("Tri6", nodes);
+    REQUIRE(gpts.size() == 6);
+
+    const auto& et = ElementLibrary::instance().get("Tri6");
+    for (int q = 0; q < 6; ++q) {
+        double xi  = et.gauss_pts_natural[q][0];
+        double eta = et.gauss_pts_natural[q][1];
+        VectorXd N = et.shape_functions(xi, eta);
+        double sum = N.sum();
+        CHECK_THAT(sum, Catch::Matchers::WithinAbs(1.0, 1e-14));
+    }
+}
+
+TEST_CASE("Tri6: Gauss weights sum to 0.5 (reference triangle area)", "[tri6][element_library]") {
+    const auto& et = ElementLibrary::instance().get("Tri6");
+    double total = 0.0;
+    for (double w : et.gauss_weights) total += w;
+    CHECK_THAT(total, Catch::Matchers::WithinAbs(0.5, 1e-14));
+}
+
+TEST_CASE("Tri6: Lagrange delta property", "[tri6][basis_builder]") {
+    MatrixXd nodes = make_tri6_nodes();
+    auto gpts = ElementLibrary::instance().compute_gauss_points_global("Tri6", nodes);
+    int N = static_cast<int>(gpts.size());
+
+    BasisBuilder bb;
+    BasisMatrix basis = bb.build(gpts);
+    MonomialBasis2D mono = get_serendipity_basis_2d(N);
+
+    // builder shifts by gpts.back() — mirror that here
+    Point2D origin = gpts.back();
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
+            Point2D p_sh = gpts[j] - origin;
+            VectorXd m = mono.evaluate(p_sh[0], p_sh[1]);
+            double val = basis.row(i).dot(m);
+            double expected = (i == j) ? 1.0 : 0.0;
+            CHECK_THAT(val, Catch::Matchers::WithinAbs(expected, 1e-10));
+        }
+    }
+}
+
+TEST_CASE("Tri6: polygon has 6 vertices in CCW order", "[tri6][element_library]") {
+    MatrixXd nodes = make_tri6_nodes();
+    Polygon2D poly = ElementLibrary::instance().element_polygon("Tri6", nodes);
+    REQUIRE(poly.size() == 6);
+
+    // Compute signed area via shoelace; must be > 0 for CCW
+    double area = 0.0;
+    int n = static_cast<int>(poly.size());
+    for (int i = 0; i < n; ++i) {
+        int j = (i + 1) % n;
+        area += poly[i][0] * poly[j][1] - poly[j][0] * poly[i][1];
+    }
+    area *= 0.5;
+    CHECK(area > 0.0);
+}
+
+// -----------------------------------------------------------------------
 // Test 5: Reference data comparison (if file exists)
 // -----------------------------------------------------------------------
 TEST_CASE("BasisBuilder: match Python reference data", "[basis_builder][reference]") {

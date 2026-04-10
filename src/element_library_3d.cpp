@@ -135,6 +135,36 @@ static MatrixXd hex8_grad(double xi, double eta, double zeta) {
     return dN;
 }
 
+// ---------------------------------------------------------------------------
+// Tet4 — 4-node linear tetrahedron
+//
+// Node ordering (L0=1-xi-eta-zeta, L1=xi, L2=eta, L3=zeta):
+//   N0: (0,0,0)   N1: (1,0,0)   N2: (0,1,0)   N3: (0,0,1)
+//
+// Shape functions:
+//   N0 = 1-xi-eta-zeta   N1 = xi   N2 = eta   N3 = zeta
+// ---------------------------------------------------------------------------
+
+static VectorXd tet4_shape(double xi, double eta, double zeta) {
+    VectorXd N(4);
+    N(0) = 1.0 - xi - eta - zeta;
+    N(1) = xi;
+    N(2) = eta;
+    N(3) = zeta;
+    return N;
+}
+
+// Returns (4 x 3): row i = [dN_i/dxi, dN_i/deta, dN_i/dzeta]
+// Gradients are constant for linear element.
+static MatrixXd tet4_grad(double /*xi*/, double /*eta*/, double /*zeta*/) {
+    MatrixXd dN(4, 3);
+    dN(0, 0) = -1.0;  dN(0, 1) = -1.0;  dN(0, 2) = -1.0;
+    dN(1, 0) =  1.0;  dN(1, 1) =  0.0;  dN(1, 2) =  0.0;
+    dN(2, 0) =  0.0;  dN(2, 1) =  1.0;  dN(2, 2) =  0.0;
+    dN(3, 0) =  0.0;  dN(3, 1) =  0.0;  dN(3, 2) =  1.0;
+    return dN;
+}
+
 void ElementLibrary3D::register_builtins_() {
     // -------------------------------------------------------------------------
     // Hex8: 2×2×2 primary integration, 3×3×3 higher-order quadrature
@@ -171,6 +201,44 @@ void ElementLibrary3D::register_builtins_() {
                     et.quad_pts_natural.push_back({xi3[i], xi3[j], xi3[k]});
                     et.quad_weights.push_back(we3[i] * we3[j] * we3[k]);
                 }
+
+        register_type(et);
+    }
+
+    // -------------------------------------------------------------------------
+    // Tet4: 4-point primary rule, 4-point quadrature (linear — no higher order needed)
+    // -------------------------------------------------------------------------
+    {
+        ElementType3D et;
+        et.name = "Tet4";
+        et.n_nodes = 4;
+        et.n_integration_points = 4;
+        et.n_quad_points = 4;
+
+        et.shape_functions    = tet4_shape;
+        et.shape_fn_gradients = tet4_grad;
+
+        // Standard 4-point Gauss rule for tetrahedron, exact for degree 2.
+        // Reference tet: vertices at (0,0,0),(1,0,0),(0,1,0),(0,0,1), volume=1/6.
+        // a = (5-sqrt(5))/20 ≈ 0.1381966011250105
+        // b = 1-3a           ≈ 0.5854101966249685
+        // All weights = 1/24 (= volume/4).
+        const double a = (5.0 - std::sqrt(5.0)) / 20.0;
+        const double b = 1.0 - 3.0 * a;
+        const double w = 1.0 / 24.0;
+
+        et.gauss_pts_natural = {
+            {a, a, a},
+            {b, a, a},
+            {a, b, a},
+            {a, a, b},
+        };
+        et.gauss_weights = { w, w, w, w };
+
+        // Same rule used for higher-order quadrature (linear element, so no gain
+        // from a denser rule; upgrade to Keast 5-point if needed).
+        et.quad_pts_natural = et.gauss_pts_natural;
+        et.quad_weights     = et.gauss_weights;
 
         register_type(et);
     }

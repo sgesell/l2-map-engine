@@ -102,6 +102,29 @@ static VectorXd quad9_shape(double xi, double eta) {
     return N;
 }
 
+// ---------------------------------------------------------------------------
+// Tri6 — 6-node quadratic triangle, 6-point Dunavant rule (exact degree 4)
+//
+// Node ordering (L1=xi, L2=eta, L3=1-xi-eta):
+//   N0: corner (0, 0)    N1: corner (1, 0)    N2: corner (0, 1)
+//   N3: midside N0-N1 (0.5, 0)
+//   N4: midside N1-N2 (0.5, 0.5)
+//   N5: midside N2-N0 (0,   0.5)
+// ---------------------------------------------------------------------------
+static VectorXd tri6_shape(double xi, double eta) {
+    const double L1 = xi;
+    const double L2 = eta;
+    const double L3 = 1.0 - xi - eta;
+    VectorXd N(6);
+    N(0) = L3 * (2.0*L3 - 1.0);
+    N(1) = L1 * (2.0*L1 - 1.0);
+    N(2) = L2 * (2.0*L2 - 1.0);
+    N(3) = 4.0 * L1 * L3;
+    N(4) = 4.0 * L1 * L2;
+    N(5) = 4.0 * L2 * L3;
+    return N;
+}
+
 void ElementLibrary::register_builtins_() {
     // --- Quad8 ---
     {
@@ -204,6 +227,43 @@ void ElementLibrary::register_builtins_() {
         // Center node (8) not part of the polygon boundary
         et.polygon_vertex_order = {0, 4, 1, 5, 2, 6, 3, 7};
         et.shape_functions = quad9_shape;
+        register_type(et);
+    }
+
+    // --- Tri6 ---
+    {
+        ElementType et;
+        et.name = "Tri6";
+        et.dim  = Dimension::D2;
+        et.n_nodes = 6;
+        et.n_integration_points = 6;
+        et.poly_degree = 2;
+        et.n_monomials = 6;  // degree-2 triangle basis: {1, x, y, x², xy, y²}
+
+        // Dunavant 6-point rule, exact for degree 4.
+        // Two families of 3 symmetrically placed points.
+        // Reference triangle: (0,0)-(1,0)-(0,1), area = 0.5.
+        // Weights already include the 1/2 area factor.
+        const double a1 = 0.44594849091597, b1 = 0.10810301816807;
+        const double a2 = 0.09157621350977, b2 = 0.81684757298046;
+        const double w1 = 0.11169079483901;  // 0.22338158967801 / 2
+        const double w2 = 0.05497587182766;  // 0.10995174365532 / 2
+
+        et.gauss_pts_natural = {
+            {a1, a1}, {b1, a1}, {a1, b1},   // family 1
+            {a2, a2}, {b2, a2}, {a2, b2},   // family 2
+        };
+        et.gauss_weights = { w1, w1, w1, w2, w2, w2 };
+
+        et.node_pts_natural = {
+            {0.0, 0.0}, {1.0, 0.0}, {0.0, 1.0},   // corners N0-N2
+            {0.5, 0.0}, {0.5, 0.5}, {0.0, 0.5},   // midsides N3-N5
+        };
+
+        // CCW: corner, midside, corner, midside, corner, midside
+        et.polygon_vertex_order = {0, 3, 1, 4, 2, 5};
+
+        et.shape_functions = tri6_shape;
         register_type(et);
     }
 }

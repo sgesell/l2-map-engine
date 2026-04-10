@@ -3,6 +3,7 @@
 #include "l2map/mapping_engine_3d.hpp"
 #include "l2map/mapping_engine_3d_exact.hpp"
 #include "l2map/element_library_3d.hpp"
+#include "l2map/basis_builder_3d.hpp"
 #include "l2map/mesh.hpp"
 #include <cmath>
 #include <chrono>
@@ -602,4 +603,80 @@ TEST_CASE("3D Exact Scale: 100K fine elements (22^3->46^3)", "[mapping_3d_exact]
               << "  max_err=" << max_err << "\n";
 
     CHECK(max_err < 1e-8);
+}
+
+// =============================================================================
+// Tet4 element library tests
+// =============================================================================
+
+// Unit tetrahedron: N0(0,0,0), N1(1,0,0), N2(0,1,0), N3(0,0,1)
+static MatrixXd make_unit_tet4_nodes() {
+    MatrixXd nodes(4, 3);
+    nodes << 0.0, 0.0, 0.0,
+             1.0, 0.0, 0.0,
+             0.0, 1.0, 0.0,
+             0.0, 0.0, 1.0;
+    return nodes;
+}
+
+TEST_CASE("Tet4: partition of unity at Gauss points", "[tet4][element_library_3d]") {
+    const auto& et = ElementLibrary3D::instance().get("Tet4");
+    REQUIRE(et.n_integration_points == 4);
+
+    for (int q = 0; q < et.n_integration_points; ++q) {
+        double xi   = et.gauss_pts_natural[q][0];
+        double eta  = et.gauss_pts_natural[q][1];
+        double zeta = et.gauss_pts_natural[q][2];
+        VectorXd N  = et.shape_functions(xi, eta, zeta);
+        CHECK_THAT(N.sum(), Catch::Matchers::WithinAbs(1.0, 1e-14));
+    }
+}
+
+TEST_CASE("Tet4: Gauss weights sum to 1/6 (reference tet volume)", "[tet4][element_library_3d]") {
+    const auto& et = ElementLibrary3D::instance().get("Tet4");
+    double total = 0.0;
+    for (double w : et.gauss_weights) total += w;
+    CHECK_THAT(total, Catch::Matchers::WithinAbs(1.0 / 6.0, 1e-14));
+}
+
+TEST_CASE("Tet4: Gauss points map inside unit tet", "[tet4][element_library_3d]") {
+    MatrixXd nodes = make_unit_tet4_nodes();
+    auto gpts = ElementLibrary3D::instance().compute_gauss_points_global("Tet4", nodes);
+    REQUIRE(static_cast<int>(gpts.size()) == 4);
+
+    for (const auto& p : gpts) {
+        CHECK(p[0] > 0.0);
+        CHECK(p[1] > 0.0);
+        CHECK(p[2] > 0.0);
+        CHECK(p[0] + p[1] + p[2] < 1.0);
+    }
+}
+
+TEST_CASE("Tet4: Jacobian determinant = 1 for unit tet", "[tet4][element_library_3d]") {
+    // Unit tet has identity Jacobian, so |J| = 1.
+    MatrixXd nodes = make_unit_tet4_nodes();
+    double jdet = ElementLibrary3D::instance().jacobian_det("Tet4", nodes, 0.25, 0.25, 0.25);
+    CHECK_THAT(jdet, Catch::Matchers::WithinAbs(1.0, 1e-14));
+}
+
+TEST_CASE("Tet4: Lagrange delta property via BasisBuilder3D", "[tet4][basis_builder_3d]") {
+    MatrixXd nodes = make_unit_tet4_nodes();
+    auto gpts = ElementLibrary3D::instance().compute_gauss_points_global("Tet4", nodes);
+    int N = static_cast<int>(gpts.size());
+
+    BasisBuilder3D bb;
+    BasisMatrix basis = bb.build(gpts);
+    MonomialBasis3D mono = get_tensor_basis_3d(N);  // {1, x, y, z}
+
+    // builder shifts by gpts.back() — mirror that here
+    Point3D origin = gpts.back();
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
+            Point3D p_sh = gpts[j] - origin;
+            VectorXd m = mono.evaluate(p_sh[0], p_sh[1], p_sh[2]);
+            double val = basis.row(i).dot(m);
+            double expected = (i == j) ? 1.0 : 0.0;
+            CHECK_THAT(val, Catch::Matchers::WithinAbs(expected, 1e-10));
+        }
+    }
 }
