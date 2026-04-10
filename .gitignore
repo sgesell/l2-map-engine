@@ -1,0 +1,67 @@
+# CMake build artifacts
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+install_manifest.txt
+
+# Visual Studio / MSVC
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.slnx
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+out/
+
+# Compiled libraries & objects
+*.lib
+*.a
+*.dll
+*.so
+*.so.*
+*.dylib
+*.pyd
+*.pdb
+*.ilk
+*.exp
+*.obj
+*.o
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+.eggs/
+venv/
+.venv/
+env/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# CMake user presets (local overrides)
+CMakeUserPresets.json
+
+# CTest output
+Testing/
+LastTest.log
+
+# FetchContent download cache (can be large)
+_deps/
