@@ -59,6 +59,10 @@ private:
     MappingOptions3D_Exact opts_;
     BasisBuilder3D         basis_builder_;
     PolyhedronClipper      clipper_;
+    // Single integrator instance shared across all element calls.
+    // Its product-basis cache is pre-warmed before the parallel loop
+    // so that parallel threads only perform reads (thread-safe).
+    PolyIntegrator3D       integrator_;
 
     IntPointCache3D precompute_integration_points_(
         const Mesh& mesh, const std::string& type) const;

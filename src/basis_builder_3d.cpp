@@ -88,10 +88,13 @@ BasisMatrix BasisBuilder3D::build(const std::vector<Point3D>& points) const {
     MonomialBasis3D mono = get_tensor_basis_3d(N);
     MatrixXd A = build_vandermonde_(shifted, mono);
 
-    Eigen::FullPivLU<MatrixXd> lu(A);
-    if (lu.rank() < N) {
+    // ColPivHouseholderQR provides rank detection and is substantially faster
+    // than FullPivLU for the well-conditioned Vandermonde matrices we build from
+    // shifted Gauss points.
+    Eigen::ColPivHouseholderQR<MatrixXd> qr(A);
+    if (qr.rank() < N) {
         std::ostringstream ss;
-        ss << "BasisBuilder3D: Vandermonde matrix rank-deficient (rank=" << lu.rank()
+        ss << "BasisBuilder3D: Vandermonde matrix rank-deficient (rank=" << qr.rank()
            << " < " << N << ") for " << N << " 3D points. "
            << "First point: (" << points[0][0] << ", " << points[0][1]
            << ", " << points[0][2] << "). "
@@ -102,7 +105,7 @@ BasisMatrix BasisBuilder3D::build(const std::vector<Point3D>& points) const {
     // Column j of A^{-1} = coefficients of φ_j.
     // Return A^{-T} so row j = coefficients of φ_j.
     MatrixXd I = MatrixXd::Identity(N, N);
-    return lu.solve(I).transpose();  // shape (N, N)
+    return qr.solve(I).transpose();  // shape (N, N)
 }
 
 double BasisBuilder3D::evaluate_basis(const BasisMatrix& basis,

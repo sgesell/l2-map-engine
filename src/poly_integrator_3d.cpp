@@ -230,6 +230,37 @@ double PolyIntegrator3D::integrate(const Polyhedron& poly,
 // multiply_polynomials (3D)
 // ---------------------------------------------------------------------------
 
+// Helper: count Pascal-tetrahedron monomials up to (inclusive) degree d.
+static int n_monomials_up_to_deg(int d) {
+    return (d + 1) * (d + 2) * (d + 3) / 6;
+}
+
+// Build and cache the product-basis descriptor for (deg_a, deg_b).
+// After the first call the result lives in product_cache_ and subsequent
+// calls are a single unordered_map::find — no allocation, no hashing of
+// individual monomial coordinates.
+void PolyIntegrator3D::warm_up_product_cache(int deg_a, int deg_b) const
+{
+    int key = deg_a * 100 + deg_b;
+    if (product_cache_.count(key)) return;  // already cached
+
+    int deg_out = deg_a + deg_b;
+    int n_out   = n_monomials_up_to_deg(deg_out);
+    int stride  = deg_out + 1;  // each per-direction power is in [0, deg_out]
+
+    ProductBasisCache pc;
+    pc.mono_out = get_tensor_basis_3d(n_out);
+    pc.stride   = stride;
+    pc.idx_table.assign(stride * stride * stride, -1);
+
+    for (int i = 0; i < n_out; ++i) {
+        auto [px, py, pz] = pc.mono_out.monomials[i];
+        pc.idx_table[px * stride * stride + py * stride + pz] = i;
+    }
+
+    product_cache_.emplace(key, std::move(pc));
+}
+
 VectorXd PolyIntegrator3D::multiply_polynomials(const VectorXd& ca,
                                                   const MonomialBasis3D& ma,
                                                   const VectorXd& cb,
@@ -238,39 +269,29 @@ VectorXd PolyIntegrator3D::multiply_polynomials(const VectorXd& ca,
 {
     int deg_a = ma.max_degree();
     int deg_b = mb.max_degree();
-    int deg_out = deg_a + deg_b;
 
-    // Build index for output: (px,py,pz) → flat index in get_tensor_basis_3d(n_out)
-    // Use Pascal tetrahedron ordering for output
-    // Number of monomials up to degree d: (d+1)(d+2)(d+3)/6
-    auto n_up_to_deg = [](int d) -> int {
-        return (d+1)*(d+2)*(d+3)/6;
-    };
-    int n_out = n_up_to_deg(deg_out);
-    mono_out = get_tensor_basis_3d(n_out);
+    // Ensure cache entry exists (no-op if already warmed up).
+    warm_up_product_cache(deg_a, deg_b);
 
-    // Build reverse map: monomial → index
-    std::unordered_map<int, int> mono_idx;
-    mono_idx.reserve(n_out);
-    for (int i = 0; i < n_out; ++i) {
-        auto [px,py,pz] = mono_out.monomials[i];
-        // Encode as a single integer: px*1000000 + py*1000 + pz (for degree ≤ 30)
-        mono_idx[px*1000000 + py*1000 + pz] = i;
-    }
+    const ProductBasisCache& pc = product_cache_.at(deg_a * 100 + deg_b);
+    mono_out    = pc.mono_out;
+    int n_out   = pc.mono_out.n_monomials;
+    int stride  = pc.stride;
 
+    // Flat-array lookup: idx_table[ox*stride^2 + oy*stride + oz] → index in mono_out.
+    // This replaces the previous per-call unordered_map (hash + allocation).
     VectorXd result = VectorXd::Zero(n_out);
 
     for (int i = 0; i < ma.n_monomials; ++i) {
         if (ca[i] == 0.0) continue;
-        auto [ax,ay,az] = ma.monomials[i];
+        auto [ax, ay, az] = ma.monomials[i];
         for (int j = 0; j < mb.n_monomials; ++j) {
             if (cb[j] == 0.0) continue;
-            auto [bx,by,bz] = mb.monomials[j];
-            int ox = ax+bx, oy = ay+by, oz = az+bz;
-            int key = ox*1000000 + oy*1000 + oz;
-            auto it = mono_idx.find(key);
-            if (it != mono_idx.end())
-                result[it->second] += ca[i] * cb[j];
+            auto [bx, by, bz] = mb.monomials[j];
+            int ox = ax + bx, oy = ay + by, oz = az + bz;
+            int flat_idx = pc.idx_table[ox * stride * stride + oy * stride + oz];
+            if (flat_idx >= 0)
+                result[flat_idx] += ca[i] * cb[j];
         }
     }
     return result;

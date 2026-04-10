@@ -6,6 +6,7 @@ set(TEST_SOURCES
   test_basis_builder.cpp
   test_polygon_clipper.cpp
   test_poly_integrator.cpp
+  test_poly_integrator_3d.cpp
   test_mapping_engine.cpp
   test_mapping_engine_3d.cpp
   test_mapping_engine_diagnostic.cpp

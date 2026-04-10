@@ -4,6 +4,8 @@
 #include "polyhedron_clipper.hpp"
 #include "poly_integrator.hpp"   // reused for 2D face integrals
 #include "basis_builder.hpp"     // MonomialBasis2D
+#include <unordered_map>
+#include <vector>
 
 namespace l2map {
 
@@ -41,8 +43,37 @@ public:
                                   const VectorXd& cb, const MonomialBasis3D& mb,
                                   MonomialBasis3D& mono_product_out) const;
 
+    // Pre-populate the product-basis cache for the given degree pair.
+    // Must be called (once, in serial) before parallel use of multiply_polynomials
+    // with the same (deg_a, deg_b). Subsequent multiply_polynomials calls with this
+    // degree pair do only a cache read — no allocation, no hashing.
+    void warm_up_product_cache(int deg_a, int deg_b) const;
+
 private:
     PolyIntegrator integrator_2d_;  // Gauss-Legendre for 1D edge integrals
+
+    // ---------------------------------------------------------------------------
+    // Product-basis cache
+    //
+    // For each (deg_a, deg_b) pair, stores:
+    //   mono_out : the output MonomialBasis3D  (deg_out = deg_a + deg_b)
+    //   idx_table: flat array of size stride^3 mapping (ox,oy,oz) → index in
+    //              mono_out (or -1 for combinations that exceed deg_out per term)
+    //   stride   : deg_out + 1
+    //
+    // Cache key: deg_a * 100 + deg_b  (safe for degrees < 100).
+    //
+    // product_cache_ is mutable so const member functions can read it.
+    // Thread safety: warm_up_product_cache() populates entries before any parallel
+    // use; multiply_polynomials() then only reads (concurrent reads are safe for
+    // std::unordered_map in C++11 and later).
+    // ---------------------------------------------------------------------------
+    struct ProductBasisCache {
+        MonomialBasis3D    mono_out;
+        std::vector<int>   idx_table;  // size = stride^3, entry = -1 if unused
+        int                stride;     // deg_out + 1
+    };
+    mutable std::unordered_map<int, ProductBasisCache> product_cache_;
 
     // Decompose a 3D polynomial into homogeneous parts.
     // Returns vector indexed by degree d; each entry is a VectorXd of length N_d

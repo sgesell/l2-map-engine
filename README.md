@@ -5,24 +5,64 @@ A C++17 library for remapping finite element fields between meshes using $L^2$ p
 ## Features
 
 - **2D and 3D support** — Quad4, Quad8 (2D) and Hex8, Tet4 (3D) elements
+- **Two 3D projection engines** — approximate (Gauss-quadrature, fast) and exact (polyhedral intersection, conservative)
 - **Exact polygon/polyhedron clipping** — Sutherland-Hodgman algorithm for mesh intersection
-- **Stokes-theorem integration** — efficient polynomial integration over clipped regions without quadrature
-- **Vandermonde-based basis construction** — numerically stable Lagrange bases via Eigen `FullPivLU`
+- **Stokes-theorem integration** — exact polynomial integration over clipped regions without quadrature
+- **Vandermonde-based basis construction** — numerically stable Lagrange bases via Eigen `ColPivHouseholderQR`
 - **BVH spatial indexing** — fast bounding-volume hierarchy for element-intersection queries
 - **OpenMP parallelisation** — embarrassingly parallel element loop; falls back gracefully if OpenMP is unavailable
 - **Python bindings** — thin NumPy-friendly wrapper via pybind11
 
 ## Method
 
-For each new element $e_n$ the library solves the local system
+Both 3D engines solve the same local $L^2$ system per new element $e_n$:
 
 $$\mathbf{V} \boldsymbol{\alpha} = \mathbf{M}$$
 
-$$V_{ij} = \int_{e_n} \varphi_i \, \varphi_j \, dA$$
+$$V_{ij} = \int_{e_n} \varphi_i \, \varphi_j \, dV, \qquad M_{jl} = \sum_{\substack{e_o \,:\, e_o \cap e_n \neq \emptyset}} \int_{e_o \cap e_n} \varphi_j \left( \sum_k \beta_{kl} \, \psi_k \right) dV$$
 
-$$M_{jl} = \sum_{\substack{e_o \,:\, e_o \cap e_n \neq \emptyset}} \int_{e_o \cap e_n} \varphi_j \left( \sum_k \beta_{kl} \, \psi_k \right) dA$$
+where $\varphi_i$ are the new element basis polynomials, $\psi_k$ the old element bases, and $\beta_{kl}$ the source field coefficients. They differ in **how** these integrals are evaluated.
 
-where $\varphi_i$ are the new element basis polynomials, $\psi_k$ the old element bases, and $\beta_{kl}$ the source field coefficients. See [docs/math_notes.md](docs/math_notes.md) for the full derivation.
+### Approximate engine (`MappingEngine3D`)
+
+Uses higher-order Gauss quadrature (27-point, $3^3$) in the physical domain of $e_n$.
+
+**Mass matrix** — assembled by quadrature sum:
+
+$$V_{ij} \approx \sum_q w_q \, \varphi_i(\mathbf{x}_q) \, \varphi_j(\mathbf{x}_q)$$
+
+**RHS** — for each quadrature point $\mathbf{x}_q$, the old element containing $\mathbf{x}_q$ is found via BVH + axis-aligned bounding box containment, and the old field is evaluated by pointwise polynomial reconstruction:
+
+$$M_{jl} \approx \sum_q w_q \, \varphi_j(\mathbf{x}_q) \, u_{\mathrm{old}}(\mathbf{x}_q)$$
+
+where $u_{\mathrm{old}}(\mathbf{x}_q) = \sum_k \beta_{kl} \, \psi_k(\mathbf{x}_q)$ is evaluated from the old element's Lagrange basis.
+
+No polyhedral geometry is computed. This makes the approximate engine significantly faster, and exact for trilinear fields on conforming or smoothly-overlapping meshes. Accuracy degrades near mesh boundaries where a quadrature point may straddle two old elements or fall outside the old mesh entirely (the contribution of that point is silently dropped).
+
+### Exact engine (`MappingEngine3D_Exact`)
+
+Computes both integrals exactly by:
+
+1. **Polyhedral intersection** — the overlap $e_o \cap e_n$ is computed exactly via 3D Sutherland-Hodgman clipping.
+2. **Divergence-theorem integration** — the polynomial integrand is integrated over the clipped polyhedron without introducing quadrature error, using the reduction
+
+$$\int_P g \, dV = \sum_{d} \frac{1}{d+3} \sum_{\text{faces } k} (\mathbf{n}_k \cdot \mathbf{v}_{0k}) \int_{\text{face}_k} g_d \, dA$$
+
+where $g_d$ is the degree-$d$ homogeneous part of $g$, $\mathbf{n}_k$ the outward face normal, and $\mathbf{v}_{0k}$ any vertex on that face.
+
+This guarantees conservation of the field integral across any mesh pair, regardless of conformity. The cost is the geometric work (clipping + face integrals), which makes it slower than the approximate engine — roughly 5–20× depending on mesh complexity.
+
+### Choosing an engine
+
+| Criterion | Approximate | Exact |
+|-----------|:-----------:|:-----:|
+| Conforming / smoothly-overlapping meshes | ✓ (recommended) | ✓ |
+| Non-conforming meshes with partial overlaps | acceptable | ✓ (recommended) |
+| Integral conservation guaranteed | — | ✓ |
+| Linear fields reproduced exactly | ✓ | ✓ |
+| Speed | fast | ~5–20× slower |
+
+See [docs/math_notes.md](docs/math_notes.md) for the full derivation.
 
 ## Requirements
 
@@ -65,9 +105,12 @@ Tests use Catch2 tags to organise by subsystem:
 |-----|-------|
 | `[basis_builder]` | Vandermonde basis construction and Lagrange delta properties |
 | `[mapping_engine]` | 2D mapping: identity, parallel, bounds enforcement, reference data |
-| `[mapping_3d]` | 3D mapping: linear/quadratic fields, multi-component, parallel |
-| `[mapping_3d][scale]` | 3D scale tests (1K, 10K fine elements) |
-| `[poly_integrator]` | Stokes-theorem polygon integration |
+| `[mapping_3d]` | 3D approximate engine: linear/quadratic fields, multi-component, parallel |
+| `[mapping_3d][scale]` | 3D approximate scale tests (1K, 10K, 100K fine elements) |
+| `[mapping_3d_exact]` | 3D exact engine: linear fields, multi-component, exact vs approx |
+| `[mapping_3d_exact][scale]` | 3D exact scale tests (1K, 10K, 100K fine elements) |
+| `[poly_integrator]` | Stokes-theorem polygon integration (2D) |
+| `[poly_integrator_3d]` | Divergence-theorem polyhedron integration and polynomial multiplication (3D) |
 | `[polygon_clipper]` | Sutherland-Hodgman clipping |
 | `[reference]` | Regression tests against stored reference data |
 
@@ -107,7 +150,11 @@ print(result.values.shape)        # (M_new * 9, K)
 print(len(result.ipoint_coords))  # M_new * 9 — list of (x, y) arrays
 ```
 
-### 3D example (Hex8)
+### 3D example — approximate engine (Hex8)
+
+The approximate engine is the default for 3D. It uses a 27-point Gauss quadrature rule
+over each new element and evaluates the old field by pointwise polynomial reconstruction.
+It is fast and accurate for conforming or smoothly-overlapping meshes.
 
 ```python
 # nodes:    shape (N, 4)       — columns: [id, x, y, z]  (1-indexed IDs)
@@ -118,15 +165,37 @@ result = l2map_py.map_integration_points(
     nodes_new, elements_new,
     nodes_old, elements_old,
     field_data,
-    element_type="Hex8",   # dispatches to MappingEngine3D
+    element_type="Hex8",   # dispatches to MappingEngine3D (approximate)
+    n_threads=-1,          # -1 = all available cores
+)
+
+print(result.values.shape)        # (M_new * 8, K)
+print(len(result.ipoint_coords))  # M_new * 8 — list of (x, y, z) tuples
+```
+
+### 3D example — exact engine (Hex8)
+
+The exact engine computes the polyhedral intersection $e_o \cap e_n$ via Sutherland-Hodgman
+clipping and integrates over it exactly using the divergence theorem. Use this when
+meshes are non-conforming or when integral conservation is required.
+
+```python
+result = l2map_py.map_integration_points(
+    nodes_new, elements_new,
+    nodes_old, elements_old,
+    field_data,
+    element_type="Hex8",
+    method="exact",        # selects MappingEngine3D_Exact
+    n_gauss_1d=5,          # Gauss points per edge for face integrals (default 5)
     n_threads=-1,
 )
 
 print(result.values.shape)        # (M_new * 8, K)
-print(len(result.ipoint_coords))  # M_new * 8 — list of (x, y, z) arrays
+print(len(result.ipoint_coords))  # M_new * 8 — list of (x, y, z) tuples
 ```
 
-Supported `element_type` values: `"Quad4"`, `"Quad8"` (2D), `"Hex8"`, `"Tet4"` (3D).
+Supported `element_type` values: `"Quad4"`, `"Quad8"` (2D), `"Hex8"`, `"Tet4"` (3D).  
+The `method` parameter is `"approximate"` (default) or `"exact"` and only applies to 3D.
 
 ## C++ usage
 

@@ -5,6 +5,7 @@
 
 #include "l2map/mapping_engine.hpp"
 #include "l2map/mapping_engine_3d.hpp"
+#include "l2map/mapping_engine_3d_exact.hpp"
 #include "l2map/mesh.hpp"
 #include "l2map/io.hpp"
 
@@ -71,7 +72,9 @@ static py::object map_integration_points_numpy(
     const std::string& element_type  = "Quad8",
     bool verbose          = false,
     bool enforce_positive = false,
-    int  n_threads        = -1)
+    int  n_threads        = -1,
+    const std::string& method        = "approximate",
+    int  n_gauss_1d       = 5)
 {
     l2map::Mesh new_mesh = mesh_from_numpy(nodes_new, elements_new, element_type);
     l2map::Mesh old_mesh = mesh_from_numpy(nodes_old, elements_old, element_type);
@@ -84,6 +87,21 @@ static py::object map_integration_points_numpy(
             fd(i, j) = fb(i, j);
 
     if (is_3d_element_type(element_type)) {
+        if (method == "exact") {
+            l2map::MappingOptions3D_Exact opts_ex;
+            opts_ex.verbose    = verbose;
+            opts_ex.n_threads  = n_threads;
+            opts_ex.n_gauss_1d = n_gauss_1d;
+
+            l2map::MappingEngine3D_Exact engine_ex(opts_ex);
+            auto res_ex = engine_ex.map_integration_points(old_mesh, new_mesh, fd, element_type);
+            // Return as MappingResult3D so callers see a uniform type.
+            l2map::MappingResult3D res3d;
+            res3d.values        = std::move(res_ex.values);
+            res3d.ipoint_coords = std::move(res_ex.ipoint_coords);
+            return py::cast(std::move(res3d));
+        }
+
         l2map::MappingOptions3D opts3d;
         opts3d.verbose   = verbose;
         opts3d.n_threads = n_threads;
@@ -137,6 +155,8 @@ PYBIND11_MODULE(l2map_py, m) {
           py::arg("verbose")          = false,
           py::arg("enforce_positive") = false,
           py::arg("n_threads")        = -1,
+          py::arg("method")           = "approximate",
+          py::arg("n_gauss_1d")       = 5,
           "Map integration point data from old mesh to new mesh via L2 projection.\n\n"
           "Parameters\n"
           "----------\n"
@@ -144,5 +164,10 @@ PYBIND11_MODULE(l2map_py, m) {
           "elements_new / elements_old : ndarray shape (M, n_nodes+1) -- [id, n1..nN] (1-indexed)\n"
           "field_data : ndarray shape (M*n_ipts, 2+K) -- [elem_id, ipt_id, v1..vK] (1-indexed IDs)\n"
           "element_type : str, default 'Quad8'\n"
-          "Returns MappingResult with .values of shape (M_new * n_ipts, K)");
+          "method : str, 'approximate' (default) or 'exact' -- 3D only; selects\n"
+          "    MappingEngine3D (fast, Gauss quadrature) or MappingEngine3D_Exact\n"
+          "    (slower, exact polyhedral intersection + divergence-theorem integration)\n"
+          "n_gauss_1d : int, default 5 -- Gauss points per edge for face integrals\n"
+          "    in the exact engine; ignored by the approximate engine\n"
+          "Returns MappingResult / MappingResult3D with .values of shape (M_new * n_ipts, K)");
 }

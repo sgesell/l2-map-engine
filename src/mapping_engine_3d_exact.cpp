@@ -10,7 +10,7 @@ namespace l2map {
 // ---------------------------------------------------------------------------
 
 MappingEngine3D_Exact::MappingEngine3D_Exact(const MappingOptions3D_Exact& opts)
-    : opts_(opts)
+    : opts_(opts), integrator_(opts.n_gauss_1d)
 {}
 
 // Workaround: PolyIntegrator3D is created per map call to avoid header complexity.
@@ -72,15 +72,14 @@ MatrixXd MappingEngine3D_Exact::build_mass_matrix_(
     const MonomialBasis3D& mono,
     int N) const
 {
-    PolyIntegrator3D integrator(opts_.n_gauss_1d);
     MatrixXd V = MatrixXd::Zero(N, N);
 
     for (int i = 0; i < N; ++i) {
         for (int j = 0; j <= i; ++j) {
             MonomialBasis3D mono_prod;
-            VectorXd prod = integrator.multiply_polynomials(
+            VectorXd prod = integrator_.multiply_polynomials(
                 basis_new.row(i), mono, basis_new.row(j), mono, mono_prod);
-            double val = integrator.integrate(poly_new, prod, mono_prod);
+            double val = integrator_.integrate(poly_new, prod, mono_prod);
             V(i, j) = val;
             V(j, i) = val;
         }
@@ -104,8 +103,14 @@ MatrixXd MappingEngine3D_Exact::build_rhs_(
     const MonomialBasis3D& mono,
     int N, int n_components) const
 {
-    PolyIntegrator3D integrator(opts_.n_gauss_1d);
     MatrixXd M = MatrixXd::Zero(N, n_components);
+
+    // All old elements in a uniform Hex8 mesh have the same number of integration
+    // points — hoist the monomial basis construction outside the candidate loop so
+    // it is built once instead of once per overlapping element.
+    if (candidates.empty()) return M;
+    int N_old = static_cast<int>(itp_old.begin()->second.size());
+    MonomialBasis3D mono_old = get_tensor_basis_3d(N_old);
 
     for (ElemID oid : candidates) {
         auto fc_it = field_cache.find(oid);
@@ -138,14 +143,10 @@ MatrixXd MappingEngine3D_Exact::build_rhs_(
 
         // Old element's Gauss points in the NEW element's shifted frame (y = x - shift)
         const std::vector<Point3D>& itp_old_global = itp_old.at(oid);
-        int N_old = static_cast<int>(itp_old_global.size());
 
         std::vector<Point3D> itp_old_y(N_old);
         for (int k = 0; k < N_old; ++k)
             itp_old_y[k] = itp_old_global[k] - shift;
-
-        // Build the monomial basis for N_old points.
-        MonomialBasis3D mono_old = get_tensor_basis_3d(N_old);
 
         // Build Vandermonde in the y frame directly (no extra internal shift).
         // V_old[p][q] = mono_old_q(y_p)  where y_p = g_p^old - shift
@@ -155,12 +156,13 @@ MatrixXd MappingEngine3D_Exact::build_rhs_(
 
         // Solve V_old * field_poly = beta to get polynomial coefficients of u_old in y frame.
         // field_poly(:, l) = coefficients such that u_old(y) = mono_old(y)^T * field_poly(:,l)
+        // PartialPivLU is faster than FullPivLU for the well-conditioned Vandermonde system.
         int n_comp_local = std::min(n_components, static_cast<int>(beta.cols()));
         int n_beta_rows  = std::min(N_old, static_cast<int>(beta.rows()));
         MatrixXd rhs = MatrixXd::Zero(N_old, n_comp_local);
         if (n_beta_rows > 0)
             rhs.topRows(n_beta_rows) = beta.topRows(n_beta_rows).leftCols(n_comp_local);
-        MatrixXd field_poly = V_old.fullPivLu().solve(rhs);
+        MatrixXd field_poly = V_old.partialPivLu().solve(rhs);
 
         // For each test function φ_j and component l:
         //   M[j,l] += ∫_{isect_sh} φ_j(x) · field_poly[l](x) dV
@@ -169,9 +171,9 @@ MatrixXd MappingEngine3D_Exact::build_rhs_(
             for (int l = 0; l < n_comp_local; ++l) {
                 VectorXd field_l = field_poly.col(l);  // coeffs of u_old^l in mono_old
                 MonomialBasis3D mono_prod;
-                VectorXd prod = integrator.multiply_polynomials(
+                VectorXd prod = integrator_.multiply_polynomials(
                     phi_j, mono, field_l, mono_old, mono_prod);
-                M(j, l) += integrator.integrate(isect_sh, prod, mono_prod);
+                M(j, l) += integrator_.integrate(isect_sh, prod, mono_prod);
             }
         }
     }
@@ -288,6 +290,15 @@ MappingEngine3D_Exact::map_integration_points(
     FieldDataCache field_cache = build_field_cache_(field_data);
 
     int n_ipts = static_cast<int>(itp_new.begin()->second.size());
+
+    // Pre-warm the product-basis cache for the degree pair used by this element
+    // type, so that parallel threads in the loop below only read from the cache
+    // (concurrent reads on std::unordered_map are thread-safe in C++11).
+    {
+        MonomialBasis3D mono_sample = get_tensor_basis_3d(n_ipts);
+        int deg = mono_sample.max_degree();
+        integrator_.warm_up_product_cache(deg, deg);
+    }
     int n_elem = static_cast<int>(elem_set.size());
 
     MatrixXd results = MatrixXd::Zero(n_elem * n_ipts, n_components);
